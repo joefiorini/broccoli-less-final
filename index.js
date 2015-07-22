@@ -15,7 +15,6 @@ function Less(sourceTrees, options) {
 
     CachingWriter.apply(this, [sourceTrees, options]);
 
-    debug('given options: %o', this.lessOptions);
     if (this.inputFile) {
         this.files = [this.inputFile];
     }
@@ -46,7 +45,6 @@ Less.prototype.updateCache = function(srcDir, destDir) {
                     });
 
     }, []).map(function(file) {
-        debug('reading from: %s', srcDir[0], file);
         var fullPath = path.join(srcDir[0], file);
         return fs.readFileAsync(fullPath, 'utf8')
                     .then(function(contents) {
@@ -71,6 +69,7 @@ Less.prototype.updateCache = function(srcDir, destDir) {
 
         return less.render(pathAndContents.contents, lessOptions)
                     .then(function(output) {
+                        debug('less output: %o', output);
                         return {    filename: pathAndContents.filename,
                                     output: output
                         };
@@ -80,13 +79,29 @@ Less.prototype.updateCache = function(srcDir, destDir) {
 
     }.bind(this)).reduce(function(result, renderResult) {
 
-        debug('after render got: %o', renderResult);
         var destPath = path.join(destDir, renderResult.filename.replace('.less', '.css'));
         var basePath = path.dirname(destPath);
         mkdirp.sync(basePath);
-        return fs.writeFileAsync(destPath, renderResult.output.css);
+        var writeSourceMap;
 
-    }, []).catch(LessError, function(error) {
+        if (renderResult.output.map) {
+            var sourceMapUrl = this.lessOptions.sourceMap.sourceMapURL || destPath;
+            var sourceMapDestPath = sourceMapUrl + '.map';
+            writeSourceMap = function() {
+                debug('writing sourcemap to: %s', sourceMapDestPath);
+                return fs.writeFileAsync(sourceMapDestPath, renderResult.output.map, { encoding: 'utf8' });
+            };
+        } else {
+            writeSourceMap = function(value) {
+                return Promise.resolve(value);
+            };
+        }
+
+        debug('writing final css file to: %s', destPath);
+        return fs.writeFileAsync(destPath, renderResult.output.css, { encoding: 'utf8' })
+                    .then(writeSourceMap);
+
+    }.bind(this), []).catch(LessError, function(error) {
 
         less.writeError(error.lessError, error.lessOptions);
         throw error;

@@ -64,6 +64,21 @@ describe('broccoli-less-final', function() {
                 expectFile('relative-imports/first.css').in(result);
             });
         });
+
+        describe('sourcemaps', function() {
+            it('includes sourcemap file in output @solo', function() {
+                return buildLessTree(fixtures,
+                                     {  files: ['1-to-1/*.less'],
+                                        lessOptions:
+                                            {   sourceMap: {}
+                                            }
+                                     }
+                ).then(function(result) {
+                    expectFile('1-to-1/first.css.map').in(result);
+                    expectFile('1-to-1/second.css.map').in(result);
+                });
+            });
+        });
     });
 
     describe('n-to-1 semantics', function() {
