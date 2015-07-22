@@ -66,7 +66,7 @@ describe('broccoli-less-final', function() {
         });
 
         describe('sourcemaps', function() {
-            it('includes sourcemap file in output @solo', function() {
+            it('includes sourcemap file in output', function() {
                 return buildLessTree(fixtures,
                                      {  files: ['1-to-1/*.less'],
                                         lessOptions:
@@ -89,6 +89,31 @@ describe('broccoli-less-final', function() {
             ).then(function(result) {
                 expectFile('n-to-1/main.css').in(result);
             });
+        });
+
+        it('writes file to an optional outputFile name', function() {
+            return buildLessTree(fixtures,
+                                 {  inputFile: 'n-to-1/main.less',
+                                    outputFile: 'output.css'
+                                 }
+            ).then(function(result) {
+                expectFile('n-to-1/output.css').in(result);
+            });
+
+        });
+
+        it('accepts function for transformating outputFile option', function() {
+            return buildLessTree(fixtures,
+                                 {  inputFile: 'n-to-1/main.less',
+                                    outputFile: function(outputFile) {
+                                        return outputFile.replace('n-to-1', 'output-transformed');
+                                    }
+                                 }
+            ).then(function(result) {
+                expectFile('output-transformed/main.css').in(result);
+            });
+
+
         });
     });
 });

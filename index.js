@@ -7,6 +7,7 @@ var path = require('path');
 var less = require('less');
 var mkdirp = require('mkdirp');
 var defaults = require('lodash/object/defaults');
+var clone = require('lodash/lang/cloneDeep');
 
 var debug = require('debug')('broccoli-less-final');
 
@@ -57,39 +58,65 @@ Less.prototype.updateCache = function(srcDir, destDir) {
         var fileDir = path.dirname(pathAndContents.filename);
         paths.push(path.join(srcDir[0], fileDir));
 
-        var lessOptions =
-            {   filename: pathAndContents.filename,
-                paths: paths
-            };
+        var lessOptions = {};
+        lessOptions.filename = pathAndContents.filename;
+        lessOptions.paths = paths;
+
+        var plugins = this.lessOptions.plugins;
+        delete this.lessOptions.plugins;
 
         lessOptions =
-            defaults({}, lessOptions, this.lessOptions);
+            defaults({}, lessOptions, clone(this.lessOptions));
+
+        lessOptions.plugins = plugins;
+
+        var resultFilename = pathAndContents.filename.replace('.less', '.css');
+        var destPath = path.join(destDir, resultFilename);
+
+        if (typeof this.outputFile === 'function') {
+            resultFilename = this.outputFile(resultFilename);
+            destPath = path.join(destDir, resultFilename);
+        } else if(this.outputFile) {
+            resultFilename = this.outputFile;
+            destPath = path.join(path.dirname(destPath), this.outputFile);
+        }
+
+        if (lessOptions.sourceMap) {
+            var sourceMapURL =
+                lessOptions.sourceMap.sourceMapURL = path.basename(resultFilename) + '.map';
+        }
 
         debug('using less options: %o', lessOptions);
 
         return less.render(pathAndContents.contents, lessOptions)
                     .then(function(output) {
                         debug('less output: %o', output);
-                        return {    filename: pathAndContents.filename,
-                                    output: output
-                        };
+
+                        var result =
+                            {   filename: destPath,
+                                dirname: path.dirname(destPath),
+                                output: output
+                            };
+
+                        if (sourceMapURL) {
+                            result.sourceMapURL = path.join(path.dirname(destPath), sourceMapURL);
+                        }
+
+                        return result;
                     }).catch(function(err) {
                         throw new LessError(err, lessOptions);
                     });
 
     }.bind(this)).reduce(function(result, renderResult) {
 
-        var destPath = path.join(destDir, renderResult.filename.replace('.less', '.css'));
-        var basePath = path.dirname(destPath);
+        var basePath = path.dirname(renderResult.filename);
         mkdirp.sync(basePath);
         var writeSourceMap;
 
         if (renderResult.output.map) {
-            var sourceMapUrl = this.lessOptions.sourceMap.sourceMapURL || destPath;
-            var sourceMapDestPath = sourceMapUrl + '.map';
             writeSourceMap = function() {
-                debug('writing sourcemap to: %s', sourceMapDestPath);
-                return fs.writeFileAsync(sourceMapDestPath, renderResult.output.map, { encoding: 'utf8' });
+                debug('writing sourcemap to: %s', renderResult.sourceMapURL);
+                return fs.writeFileAsync(renderResult.sourceMapURL, renderResult.output.map, { encoding: 'utf8' });
             };
         } else {
             writeSourceMap = function(value) {
@@ -97,8 +124,8 @@ Less.prototype.updateCache = function(srcDir, destDir) {
             };
         }
 
-        debug('writing final css file to: %s', destPath);
-        return fs.writeFileAsync(destPath, renderResult.output.css, { encoding: 'utf8' })
+        debug('writing final css file to: %s', renderResult.filename);
+        return fs.writeFileAsync(renderResult.filename, renderResult.output.css, { encoding: 'utf8' })
                     .then(writeSourceMap);
 
     }.bind(this), []).catch(LessError, function(error) {
