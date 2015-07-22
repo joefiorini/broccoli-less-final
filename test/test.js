@@ -12,17 +12,39 @@ var path = require('path');
 var broccoli = require('broccoli');
 
 var fixtures = path.join(__dirname, 'fixtures');
+var external = path.join(__dirname, 'external');
 var builder;
 
 function buildLessTree(tree, options) {
-    tree = new Less(tree,
-                        {   files: ['relative-imports/*.less']
-                        });
+    tree = new Less(tree, options);
     builder = new broccoli.Builder(tree);
     return builder.build();
 }
 
 describe('broccoli-less-final', function() {
+    describe('general behavior', function() {
+        it('passes given options to less', function() {
+            return buildLessTree(fixtures,
+                                 {  files: ['compressed/compressed.less'],
+                                    lessOptions:
+                                        {   compress: true,
+                                            optimization: 10
+                                        }
+                                 }
+            ).then(function(result) {
+                expectFile('compressed/compressed.css').in(result);
+            });
+        });
+        it('uses all given trees as load paths', function() {
+            return buildLessTree([fixtures, external],
+                                 {  files: ['external-imports/basic.less']
+                                 }
+            ).then(function(result) {
+                expectFile('external-imports/basic.css').in(result);
+            });
+        });
+    });
+
     describe('1-to-1 semantics', function() {
         it('writes an output file for each input file', function() {
             return buildLessTree(fixtures,
@@ -40,6 +62,17 @@ describe('broccoli-less-final', function() {
                                  }
             ).then(function(result) {
                 expectFile('relative-imports/first.css').in(result);
+            });
+        });
+    });
+
+    describe('n-to-1 semantics', function() {
+        it('writes a single output file for a single input file', function() {
+            return buildLessTree(fixtures,
+                                 {  inputFile: 'n-to-1/main.less'
+                                 }
+            ).then(function(result) {
+                expectFile('n-to-1/main.css').in(result);
             });
         });
     });
